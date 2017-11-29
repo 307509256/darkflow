@@ -3,6 +3,9 @@ import math
 import cv2
 import os
 import json
+import csv
+from GetCsvColumn import CsvFile,EXCLUDE
+
 #from scipy.special import expit
 #from utils.box import BoundBox, box_iou, prob_compare
 #from utils.box import prob_compare2, box_intersection
@@ -11,6 +14,11 @@ from ...cython_utils.cy_yolo2_findboxes import box_constructor
 
 
 ds = True
+csvfilename = 'test.avi.csv'
+csvfile = CsvFile(csvfilename)
+person_count=[]
+dict = {}
+
 try :
 	from deep_sort.application_util import preprocessing as prep
 	from deep_sort.application_util import visualization
@@ -49,7 +57,19 @@ def extract_boxes(self,new_im):
                 cont.append([x, y, x+w, y+h])
             else : cont.append([x, y, w, h])
     return cont
-def postprocess(self,net_out, im,frame_id = 0,csv_file=None,csv=None,mask = None,encoder=None,tracker=None):
+
+def update_csv(count):
+	with open(csvfilename, 'rb') as csvfile:
+		reader = csv.DictReader(csvfile)
+		column = [row['track_id'] for row in reader]
+		blist = list(set(column))
+		clist = sorted([int(i) for i in blist])
+	if count == 0:
+		return len(clist)
+	else:
+		return clist.index(count)
+
+def postprocess(self,net_out, im,frame_id = 0,csv_file=None,csv=None,mask = None,encoder=None,tracker=None, save = False):
 	"""
 	Takes net output, draw net_out, save to disk
 	"""
@@ -138,7 +158,58 @@ def postprocess(self,net_out, im,frame_id = 0,csv_file=None,csv=None,mask = None
 				csv.writerow([frame_id,id_num,int(bbox[0]),int(bbox[1]),int(bbox[2])-int(bbox[0]),int(bbox[3])-int(bbox[1])])
 				csv_file.flush()
 			if self.FLAGS.display or self.FLAGS.saveVideo:
+				global person_count
+				global dict
+				# Black
+				# LightPink
+				# Crimson
+				# Purple
+				# Blue
+
+				# Cyan
+				# SeaGreen
+				# Yellow
+				# DarkOrange
+				# Gray
+				list_color = [(0, 0, 0), (255,182,193),(128,0,128),(255, 0, 255),(0,0,255),
+							  (0,255,255),(46,139,87),(255,255,0),(255,140,0),(128,128,128)]
+				id_person = int(update_csv(int(id_num)))
+				id_person_color = id_person % len(list_color)
+
 				cv2.rectangle(imgcv, (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])),
-						        (255,255,255), thick//3)
-				cv2.putText(imgcv, id_num,(int(bbox[0]), int(bbox[1]) - 12),0, 1e-3 * h, (255,255,255),thick//6)
+							  list_color[id_person_color], thick//3)
+
+				# init
+				if len(dict) == 0:
+					for i in range(0, 99999):
+						dict[i] = []
+						person_count.append(0)
+
+
+				center_x = (int(bbox[0]) + (int(bbox[2]) - int(bbox[0])) / 2)
+				center_y = (int(bbox[1]) + (int(bbox[3]) - int(bbox[1])) / 2 )
+
+				dict[id_person].append((center_x, center_y))
+				#print id_person,(int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3]))
+				for i in range(0, len(dict[id_person])):
+					cv2.circle(imgcv, dict[id_person][i], 1, list_color[id_person_color], thick // 5)
+					if i>0:
+						cv2.line(imgcv,dict[id_person][i-1],dict[id_person][i],list_color[id_person_color], 5)
+
+				person_count[id_person] = person_count[id_person] + 1
+				# frame num = 200  10s
+				if 	person_count[id_person]%200 == 0:
+					person_count[id_person] = 0
+					dict[id_person] = []
+
+				#cv2.putText(imgcv, id_num,(int(bbox[0]), int(bbox[1]) - 12),0, 1e-3 * h, (255,0,255),thick//6)
+
+				# show person id
+				cv2.putText(imgcv, str(id_person), (int(bbox[0]), int(bbox[1]) - 12), 0, 1e-3 * h, list_color[id_person_color], thick // 3)
+				# set font
+				font = cv2.FONT_HERSHEY_TRIPLEX
+				# count the person
+				mycount = update_csv(0)
+				# show to UI
+				cv2.putText(imgcv, 'gong count: '+str(mycount), (10,70),0, 1e-3 * h, (0,0,255),thick//6)
 	return imgcv
